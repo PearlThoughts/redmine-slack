@@ -41,8 +41,13 @@ class SlackListener < Redmine::Hook::Listener
 		issue = context[:issue]
 		journal = context[:journal]
 
-		channel = channel_for_project issue.project
-		url = url_for_project issue.project
+		channel = channel_for_issue issue
+		url = url_for_issue issue
+
+		if(channel.blank? and url.blank?)
+			channel = channel_for_project issue.project
+			url = url_for_project issue.project
+		end
 
 		return unless channel and url and Setting.plugin_redmine_slack['post_updates'] == '1'
 		return if issue.is_private?
@@ -198,6 +203,18 @@ private
 		].find{|v| v.present?}
 	end
 
+	def url_for_issue(proj)
+		return nil if proj.blank?
+
+		cf = IssueCustomField.find_by_name("Slack URL")
+
+		return [
+			(proj.custom_value_for(cf).value rescue nil),
+			(url_for_issue proj.parent),
+			Setting.plugin_redmine_slack['slack_url'],
+		].find{|v| v.present?}
+	end
+
 	def channel_for_project(proj)
 		return nil if proj.blank?
 
@@ -214,6 +231,22 @@ private
 		val
 	end
 
+	def channel_for_issue(issue)
+		return nil if issue.blank?
+
+		cf = IssueCustomField.find_by_name("Slack Channel")
+
+		val = [
+			(issue.custom_value_for(cf).value rescue nil),
+			(channel_for_project issue.parent),
+			Setting.plugin_redmine_slack['channel'],
+		].find{|v| v.present?}
+
+		# Channel name '-' is reserved for NOT notifying
+		return nil if val.to_s == '-'
+		val
+	end
+	
 	def detail_to_field(detail)
 		case detail.property
 		when "cf"
